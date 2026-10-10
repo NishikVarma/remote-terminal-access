@@ -33,19 +33,30 @@ Browser (xterm.js) <--WebSocket /ws/:id--> Session <--> PtyHost (node-pty / ConP
 
 ## Session states
 
-running (a client is attached) <-> disconnected (no client, shell alive, idle timer running) -> exited (removed from the manager).
+- `running`: at least one client attached.
+- `disconnected`: shell alive, no client; idle timer running, session killed after `SESSION_IDLE_MINUTES`.
+- `exited`: shell ended (exit, crash, kill, idle expiry). The session is removed from the manager; a client that raced the exit gets an `exit` message.
+- Spawn is synchronous, so there are no observable "created/starting" states. A spawn failure creates no session and returns 503, so there is no stored "failed" state either.
+
+## Reliability
+
+- Reconnect: the browser retries every second while the session exists (checked via `GET /sessions/:id`); attaching never spawns, and the replay buffer repaints the screen after a `term.reset()`.
+- Dead peers: every socket is pinged every `HEARTBEAT_SECONDS` (15); no pong by the next tick -> terminated -> session becomes `disconnected`.
+- Slow peers: a socket with more than 1 MiB unsent is terminated (not buffered). The shell keeps running and the client can reconnect.
+- Several clients may attach to one session; it is `disconnected` only after the last leaves.
+- Server hard-kill: on this Windows machine the shell and its children exit with the server (measured with `ping -t`).
 
 ## Threat model (Stage 2)
 
-| Threat                                    | Mitigation                                         | Status                                   |
-| ----------------------------------------- | -------------------------------------------------- | ---------------------------------------- |
-| Website opens WebSocket/POST to localhost | Origin allow-list, SameSite=Strict cookie          | tested                                   |
-| DNS rebinding                             | Host hostname allow-list                           | tested                                   |
-| Guessing the pairing code                 | single use, 2 min, 5 attempts                      | tested                                   |
-| Stolen database file                      | only token hashes stored                           | tested                                   |
-| Stolen/lost phone                         | revoke from another paired device; 30-day expiry   | tested                                   |
-| One device reading another's session      | per-device ownership                               | tested                                   |
-| Resource exhaustion                       | session cap, buffer cap, idle kill, payload limits | tested (except slow-client backpressure) |
+| Threat                                    | Mitigation                                         | Status |
+| ----------------------------------------- | -------------------------------------------------- | ------ |
+| Website opens WebSocket/POST to localhost | Origin allow-list, SameSite=Strict cookie          | tested |
+| DNS rebinding                             | Host hostname allow-list                           | tested |
+| Guessing the pairing code                 | single use, 2 min, 5 attempts                      | tested |
+| Stolen database file                      | only token hashes stored                           | tested |
+| Stolen/lost phone                         | revoke from another paired device; 30-day expiry   | tested |
+| One device reading another's session      | per-device ownership                               | tested |
+| Resource exhaustion                       | session cap, buffer cap, idle kill, payload limits | tested |
 
 ## Known limitations
 
@@ -54,5 +65,5 @@ running (a client is attached) <-> disconnected (no client, shell alive, idle ti
 - Any paired device can revoke any other (single-owner tool). No separate admin role.
 - Audit log has no retention limit yet, and `auth_denied` can grow under scanning.
 - `node:sqlite` is experimental in Node 22 (prints a warning); Postgres migration is planned.
-- Open sockets re-check their device every 30 s (`AUTH_RECHECK_SECONDS`), so expiry or revocation ends them within that window. Deleting a cookie in the browser does not end an open session; revoke the device instead.
-- No WebSocket backpressure, no heartbeat, no login rate limit beyond the pairing code.
+- Open sockets re-check their device on each heartbeat (15 s), so expiry or revocation ends them within that window. Deleting a cookie in the browser does not end an open session; revoke the device instead.
+- No login rate limit beyond the pairing code and no input rate limit. The 256 KiB replay buffer is not terminal-state aware, so a replay can start mid escape sequence.
