@@ -2,7 +2,7 @@
 
 Self-hosted, browser-based remote terminal for your own machine (initial target: Windows dev PC, accessed from a phone browser). AI troubleshooting is a later, optional layer.
 
-**Status: Stage 1 (local terminal MVP).** Works in a browser on this machine. **No authentication yet** - loopback only, never expose to a network.
+**Status: Stage 2 (device pairing).** Loopback only. A browser must be paired with a one-time code printed in the server console (type `pair` + Enter for a new one). Do not expose to a network yet: no TLS, see `docs/ARCHITECTURE.md`.
 
 ## Requirements
 
