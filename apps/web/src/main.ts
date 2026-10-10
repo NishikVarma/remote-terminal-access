@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { ClientMessage, ServerMessage } from '@rta/shared';
 import { mountDevicesPanel } from './devices-panel.js';
+import { mountKeysToolbar } from './keys-toolbar.js';
 
 const KEY = 'sessionId';
 const root = document.getElementById('terminal')!;
@@ -54,6 +55,11 @@ function showPairing(): void {
 
 function startTerminal(): void {
   const term = new Terminal({ cursorBlink: true, fontSize: 14 });
+  const toolbar = mountKeysToolbar({
+    root,
+    focusTerminal: () => term.focus(),
+    onKey: (data) => send({ type: 'input', data }),
+  });
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(root);
@@ -66,11 +72,12 @@ function startTerminal(): void {
   let ws: WebSocket | undefined;
   const send = (m: ClientMessage) =>
     ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m));
-  term.onData((data) => send({ type: 'input', data }));
+  term.onData((data) => send({ type: 'input', data: toolbar.applyCtrl(data) }));
   term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
 
   const needPairing = () => {
     devicesPanel.destroy();
+    toolbar.destroy();
     term.dispose();
     showPairing();
   };

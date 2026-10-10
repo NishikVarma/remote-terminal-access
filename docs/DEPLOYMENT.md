@@ -31,6 +31,31 @@ The server serves the built web client itself, so one port is enough. Run `npm r
 at startup the server prints whether it found `apps/web/dist`. (During development, `npm run dev:web`
 proxies the API to the server instead.)
 
+## Quick LAN test (functional check only)
+
+Plain HTTP on your home Wi-Fi, to check that the page, pairing and typing work on a phone. The
+pairing code and cookie travel unencrypted on that network, so do this only on a network you trust,
+and stop the server afterwards.
+
+1. `npm run build`.
+2. Find the PC's Wi-Fi IPv4 address (`ipconfig`), e.g. `192.168.1.20`.
+3. In PowerShell, from the repo root:
+
+   ```powershell
+   $env:HOST = '192.168.1.20'
+   $env:ALLOWED_ORIGINS = 'http://192.168.1.20:8787'
+   $env:ALLOW_INSECURE_BIND = 'true'
+   npm run start -w @rta/server
+   ```
+
+4. Windows Firewall may block inbound connections, especially if the network profile is "Public".
+   Allow Node.js on private networks when prompted, or switch the Wi-Fi profile to Private.
+5. On the phone (same Wi-Fi) open `http://192.168.1.20:8787` and enter the code from the console.
+
+What to check: pairing form -> prompt; typing; the Esc/Tab/Ctrl/arrow toolbar; refresh keeps the
+session; lock and unlock the phone (it should reconnect); the Devices panel; revoking the phone from
+a PC browser sends the phone back to the pairing form within about 15 seconds.
+
 ## What each setting does
 
 | Setting                | Purpose                                                                        |

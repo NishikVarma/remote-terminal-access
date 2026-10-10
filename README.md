@@ -1,22 +1,72 @@
 # remote-terminal-access
 
-Self-hosted, browser-based remote terminal for your own machine (initial target: Windows dev PC, accessed from a phone browser). AI troubleshooting is a later, optional layer.
+Self-hosted, browser-based terminal for your own computer. Open a real shell on your Windows PC
+from a phone or another browser, with device pairing, per-device session isolation, reconnect
+handling and an audit log.
 
-**Status: Stage 2 (device pairing).** Loopback only. A browser must be paired with a one-time code printed in the server console (type `pair` + Enter for a new one). Do not expose to a network yet: no TLS, see `docs/ARCHITECTURE.md`.
+**Status:** working on Windows (ConPTY). Loopback-only by default. Phone access over HTTPS through a
+private-network proxy is documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and the server side
+is tested; the proxy flow itself is not covered by this repo's tests.
+
+## What it does
+
+- Real interactive PowerShell in the browser (xterm.js + node-pty).
+- Pairing: the server prints a one-time code on the PC console; the browser exchanges it for a
+  device cookie. Tokens are stored hashed.
+- Sessions survive refreshes and dropped connections; a reconnect never starts a second shell.
+- Device list with revoke, audit log, idle-session expiry, bounded buffers and retention.
+- Touch toolbar (Esc, Tab, Ctrl, arrows) for phone keyboards.
 
 ## Requirements
 
-Node >= 22, npm >= 10. Windows 10 1809+ (ConPTY).
+Node >= 22, npm >= 10, Windows 10 1809+ (ConPTY).
 
-## Commands
+## Quick start
 
 ```
 npm install
-npm run typecheck | lint | test | build
-npm run dev:server    # http://127.0.0.1:8787
-npm run dev:web       # open http://localhost:5173 (must be localhost, see ALLOWED_ORIGINS)
+npm run build
+npm run start -w @rta/server     # prints http://127.0.0.1:8787 and a pairing code
 ```
 
-Copy `.env.example` to `.env` for configuration. Never commit `.env`.
+Open http://localhost:8787, enter the pairing code shown in the server console. Type `pair` + Enter
+in that console for a new code.
 
-See `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md` (phone access over HTTPS) and `docs/ROADMAP.md`.
+Development with hot reload:
+
+```
+npm run dev:server               # server on 127.0.0.1:8787
+npm run dev:web                  # open http://localhost:5173 (must be "localhost", see ALLOWED_ORIGINS)
+```
+
+## Configuration
+
+Copy `.env.example` to `.env` at the repo root; `npm run start` and `npm run dev` load it
+automatically. Never commit `.env`. All settings are listed in `.env.example` and explained in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+## Checks
+
+```
+npm run typecheck && npm run lint && npm run format:check && npm test && npm run build
+```
+
+CI runs the same steps on Windows (the PTY tests need ConPTY).
+
+## Security notes
+
+- There is no TLS in the app. It binds `127.0.0.1` and refuses any other address unless
+  `ALLOW_INSECURE_BIND=true`. Use a TLS-terminating private-network proxy for phone access.
+- A paired browser has full shell access to the PC. Treat pairing codes and the device list as
+  sensitive; revoke devices you no longer use.
+- Any paired device can revoke any other and read the audit log (single-owner design).
+- See the threat model and known limitations in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Layout
+
+```
+apps/server     Express + ws, sessions, auth, audit, SQLite (node:sqlite)
+apps/web        xterm.js client (plain TypeScript, Vite)
+packages/shared message schemas shared by both
+docs/           architecture, deployment, roadmap
+```
