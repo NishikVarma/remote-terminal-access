@@ -101,6 +101,20 @@ describe('SessionManager', () => {
     expect(manager.getOwned(theirs.id, 'b')).toBe(theirs);
   });
 
+  it('tells a client that attaches after exit, and kill is idempotent', () => {
+    const { manager, ptys } = setup();
+    const s = manager.create('dev', 80, 24);
+    const kill = vi.spyOn(ptys[0]!, 'kill');
+    s.kill();
+    s.kill();
+    expect(kill).toHaveBeenCalledTimes(1);
+
+    const seen: ServerMessage[] = [];
+    s.attach((m) => seen.push(m));
+    expect(seen).toEqual([{ type: 'exit', exitCode: 0 }]);
+    expect(s.state).toBe('exited');
+  });
+
   it('kills a session nobody is attached to after the idle time', () => {
     vi.useFakeTimers();
     const { manager, onExpire } = setup(2, 1000);

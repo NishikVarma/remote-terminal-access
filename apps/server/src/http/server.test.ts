@@ -21,7 +21,7 @@ let pairing: PairingCodes;
 let audit: AuditLog;
 let base: string;
 
-async function start(deviceTtlMs = 86_400_000, recheckSeconds = 30): Promise<void> {
+async function start(deviceTtlMs = 86_400_000, heartbeatSeconds = 15): Promise<void> {
   const db = openDb(':memory:');
   audit = new AuditLog(db);
   pairing = new PairingCodes();
@@ -30,7 +30,7 @@ async function start(deviceTtlMs = 86_400_000, recheckSeconds = 30): Promise<voi
     idleMs: 60_000,
   });
   const devices = new DeviceStore(db, deviceTtlMs);
-  const cfg = { ...config, AUTH_RECHECK_SECONDS: recheckSeconds };
+  const cfg = { ...config, HEARTBEAT_SECONDS: heartbeatSeconds };
   server = createServer({ config: cfg, sessions, devices, pairing, audit });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = `127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -187,6 +187,52 @@ describe('sessions', () => {
     const code = await new Promise<number>((r) => ws.once('close', r));
     expect(code).toBe(4001);
   });
+
+  it('drops a client that stops answering pings, leaving the session alive', async () => {
+    await start(86_400_000, 0.1);
+    const { cookie, id: deviceId } = await pair();
+    const id = await newSession(cookie);
+    const headers = { origin: ORIGIN, cookie };
+    const ws = new WebSocket(`ws://${base}/ws/${id}`, { headers, autoPong: false });
+    await new Promise((r) => ws.once('open', r));
+    await new Promise((r) => ws.once('close', r));
+    await waitFor(() => sessions.getOwned(id, deviceId)?.state === 'disconnected');
+  });
+
+  it('lets two clients watch one session and only disconnects after the last leaves', async () => {
+    await start();
+    const { cookie, id: deviceId } = await pair();
+    const id = await newSession(cookie);
+    const open = async () => {
+      const ws = new WebSocket(`ws://${base}/ws/${id}`, { headers: { origin: ORIGIN, cookie } });
+      await new Promise((r) => ws.once('open', r));
+      return ws;
+    };
+    const [a, b] = [await open(), await open()];
+    a.close();
+    await new Promise((r) => a.once('close', r));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(sessions.getOwned(id, deviceId)?.state).toBe('running');
+    b.close();
+    await waitFor(() => sessions.getOwned(id, deviceId)?.state === 'disconnected');
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'drops a slow client instead of buffering unboundedly; the shell survives',
+    async () => {
+      await start();
+      const { cookie, id: deviceId } = await pair();
+      const id = await newSession(cookie);
+      const ws = new WebSocket(`ws://${base}/ws/${id}`, { headers: { origin: ORIGIN, cookie } });
+      await new Promise((r) => ws.once('open', r));
+      (ws as unknown as { _socket: { pause(): void } })._socket.pause(); // stop reading
+      const flood = "1..120000 | ForEach-Object { 'x' * 100 }" + String.fromCharCode(13);
+      ws.send(JSON.stringify({ type: 'input', data: flood }));
+      await waitFor(() => sessions.getOwned(id, deviceId)?.state === 'disconnected', 20_000);
+      expect(sessions.getOwned(id, deviceId)).toBeDefined();
+    },
+    30_000,
+  );
 
   it.runIf(process.platform === 'win32')(
     'runs a real shell over WebSocket and reattaches without a second process',

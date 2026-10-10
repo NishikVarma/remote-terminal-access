@@ -1,4 +1,4 @@
-# Architecture (Stage 2)
+# Architecture (Stage 3)
 
 Modular monolith, Node.js + TypeScript.
 

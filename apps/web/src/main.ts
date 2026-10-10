@@ -59,32 +59,63 @@ function startTerminal(): void {
   fit.fit();
   window.addEventListener('resize', () => fit.fit());
 
-  getSessionId(term.cols, term.rows)
-    .then((id) => {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const ws = new WebSocket(`${proto}://${location.host}/ws/${id}`);
-      const send = (m: ClientMessage) =>
-        ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m));
+  // Status lines in the terminal itself, on their own line.
+  const status = (text: string) => term.write(`\r\n[${text}]\r\n`);
 
-      ws.onopen = () => send({ type: 'resize', cols: term.cols, rows: term.rows });
-      ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data) as ServerMessage;
-        if (msg.type === 'output') term.write(msg.data);
-        else {
-          sessionStorage.removeItem(KEY);
-          term.write(`\r\n[process exited with code ${msg.exitCode}]\r\n`);
-        }
-      };
-      ws.onclose = () => term.write('\r\n[disconnected]\r\n');
-      term.onData((data) => send({ type: 'input', data }));
-      term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
-    })
-    .catch((e: Error) => {
-      if (e instanceof NotPaired) {
-        term.dispose();
-        showPairing();
-      } else term.write(`\r\n${e.message}\r\n`);
-    });
+  let ws: WebSocket | undefined;
+  const send = (m: ClientMessage) =>
+    ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m));
+  term.onData((data) => send({ type: 'input', data }));
+  term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
+
+  const needPairing = () => {
+    term.dispose();
+    showPairing();
+  };
+
+  // The server replays buffered output on every attach, so the screen is reset first.
+  const connect = (id: string) => {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const socket = (ws = new WebSocket(`${proto}://${location.host}/ws/${id}`));
+    let exited = false;
+
+    socket.onopen = () => {
+      term.reset();
+      send({ type: 'resize', cols: term.cols, rows: term.rows });
+    };
+    socket.onmessage = (e) => {
+      const msg = JSON.parse(e.data) as ServerMessage;
+      if (msg.type === 'output') return term.write(msg.data);
+      exited = true;
+      sessionStorage.removeItem(KEY);
+      status(`process exited with code ${msg.exitCode}`);
+    };
+    socket.onclose = (e) => {
+      if (exited) return;
+      if (e.code === 4001) return needPairing();
+      status('disconnected, reconnecting...');
+      setTimeout(() => reconnect(id), 1000);
+    };
+  };
+
+  // Only retry while the session still exists; otherwise report why we stopped.
+  const reconnect = async (id: string) => {
+    try {
+      const res = await fetch(`/sessions/${id}`);
+      if (res.status === 401) return needPairing();
+      if (res.status === 404) {
+        sessionStorage.removeItem(KEY);
+        return status('session ended');
+      }
+      connect(id);
+    } catch {
+      setTimeout(() => reconnect(id), 2000); // server unreachable
+    }
+  };
+
+  getSessionId(term.cols, term.rows)
+    .then(connect)
+    .catch((e: Error) => (e instanceof NotPaired ? needPairing() : status(e.message)));
 }
 
 startTerminal();

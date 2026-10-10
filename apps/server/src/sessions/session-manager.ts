@@ -12,6 +12,7 @@ export class Session {
   private buffer = '';
   private listeners = new Set<Listener>();
   private idleTimer?: NodeJS.Timeout;
+  private exitCode = 0;
 
   constructor(
     readonly id: string,
@@ -27,6 +28,7 @@ export class Session {
     });
     pty.onExit(({ exitCode }) => {
       this.state = 'exited';
+      this.exitCode = exitCode;
       clearTimeout(this.idleTimer);
       this.emit({ type: 'exit', exitCode });
       this.onExit();
@@ -36,10 +38,15 @@ export class Session {
 
   /** Replays recent output, then streams. Returns the detach function. Never spawns. */
   attach(listener: Listener): () => void {
+    if (this.state === 'exited') {
+      // Lost a race with process exit: tell the client instead of leaving it hanging.
+      listener({ type: 'exit', exitCode: this.exitCode });
+      return () => {};
+    }
     if (this.buffer) listener({ type: 'output', data: this.buffer });
     this.listeners.add(listener);
     clearTimeout(this.idleTimer);
-    if (this.state !== 'exited') this.state = 'running';
+    this.state = 'running';
     return () => {
       this.listeners.delete(listener);
       if (this.state === 'running' && this.listeners.size === 0) {
@@ -56,7 +63,7 @@ export class Session {
   }
 
   kill(): void {
-    this.pty.kill();
+    if (this.state !== 'exited') this.pty.kill();
   }
 
   // A session nobody is attached to is killed after idleMs.

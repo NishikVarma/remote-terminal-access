@@ -11,6 +11,8 @@ import type { Config } from '../config/index.js';
 import type { SessionManager } from '../sessions/session-manager.js';
 
 const COOKIE = 'rta_device';
+// A client this far behind is dropped; it can reconnect and get the replay buffer.
+const MAX_BUFFERED_BYTES = 1024 * 1024;
 
 const size = z.number().int().min(1).max(500);
 const createBody = z.object({ cols: size.default(80), rows: size.default(24) });
@@ -134,12 +136,23 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
     wss.handleUpgrade(req, socket, head, (ws) => {
       const mine = sockets.get(device.id) ?? new Set<WebSocket>();
       sockets.set(device.id, mine.add(ws));
-      const detach = session.attach((msg) => ws.send(JSON.stringify(msg)));
+      const detach = session.attach((msg) => {
+        if (ws.readyState !== ws.OPEN) return;
+        if (ws.bufferedAmount > MAX_BUFFERED_BYTES) return ws.terminate();
+        ws.send(JSON.stringify(msg));
+      });
+
       // Auth is checked at upgrade; keep checking so expiry/revocation ends open sockets too.
+      // Ping/pong detects clients that vanished without closing (sleeping phone, dead network).
       const token = tokenOf(req);
-      const recheck = setInterval(() => {
-        if (!devices.authenticate(token)) ws.close(4001, 'unauthorized');
-      }, config.AUTH_RECHECK_SECONDS * 1000);
+      let alive = true;
+      ws.on('pong', () => (alive = true));
+      const heartbeat = setInterval(() => {
+        if (!devices.authenticate(token)) return ws.close(4001, 'unauthorized');
+        if (!alive) return ws.terminate();
+        alive = false;
+        ws.ping();
+      }, config.HEARTBEAT_SECONDS * 1000);
       ws.on('message', (raw) => {
         try {
           const msg = clientMessageSchema.safeParse(JSON.parse(raw.toString()));
@@ -149,7 +162,7 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
         }
       });
       ws.on('close', () => {
-        clearInterval(recheck);
+        clearInterval(heartbeat);
         mine.delete(ws);
         detach();
       });
