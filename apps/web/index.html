@@ -3,10 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html,
+      body,
+      #terminal {
+        height: 100%;
+        margin: 0;
+        background: #000;
+      }
+    </style>
     <title>remote-terminal-access</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="terminal"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

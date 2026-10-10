@@ -1,25 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { waitFor } from '../test-utils.js';
 import { spawnPty } from './pty-host.js';
 
-describe.runIf(process.platform === 'win32')('PtyHost (Windows ConPTY spike)', () => {
-  it('runs a command in PowerShell and exits cleanly', async () => {
-    const pty = spawnPty({
-      file: 'powershell.exe',
-      args: ['-NoLogo', '-NoProfile'],
-      cwd: process.cwd(),
-      cols: 80,
-      rows: 24,
-    });
+describe.runIf(process.platform === 'win32')('spawnPty (Windows ConPTY)', () => {
+  it('runs a command and reports the exit code', async () => {
+    const pty = spawnPty('powershell.exe', 80, 24);
     let out = '';
+    let exitCode: number | undefined;
     pty.onData((d) => (out += d));
-    const exit = new Promise<{ exitCode: number }>((r) => pty.onExit(r));
-    await new Promise((r) => setTimeout(r, 1500));
+    pty.onExit((e) => (exitCode = e.exitCode));
+
     pty.write('echo hello-pty\r');
+    await waitFor(() => out.includes('hello-pty'));
     pty.resize(100, 30);
-    await new Promise((r) => setTimeout(r, 1000));
-    pty.write('exit\r');
-    const e = await exit;
-    expect(out).toContain('hello-pty');
-    expect(e.exitCode).toBe(0);
-  }, 20000);
+    pty.write('exit 3\r');
+    await waitFor(() => exitCode !== undefined);
+    expect(exitCode).toBe(3);
+  });
 });

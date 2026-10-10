@@ -11,10 +11,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev:server": "npm run dev -w @rta/server",
+    "dev:server": "npm run build -w @rta/shared && npm run dev -w @rta/server",
     "dev:web": "npm run dev -w @rta/web",
-    "build": "npm run build -w @rta/shared && npm run build -w @rta/server && npm run build -w @rta/web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run build -w @rta/shared && npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
