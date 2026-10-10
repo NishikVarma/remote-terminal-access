@@ -127,6 +127,17 @@ describe('pairing and authentication', () => {
     ]);
   });
 
+  it('answers malformed JSON with 400 and no stack trace', async () => {
+    await start();
+    const res = await fetch(`http://${base}/pair`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: ORIGIN },
+      body: '{bad',
+    });
+    expect(res.status).toBe(400);
+    expect(await res.text()).not.toMatch(/node_modules|SyntaxError/);
+  });
+
   it('sets an HttpOnly, SameSite=Strict cookie', async () => {
     await start();
     const body = { code: pairing.issue(), name: 'phone' };

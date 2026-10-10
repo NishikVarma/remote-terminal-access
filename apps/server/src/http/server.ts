@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type IncomingMessage, type Server } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { clientMessageSchema } from '@rta/shared';
-import express from 'express';
+import { clientMessageSchema, terminalSize } from '@rta/shared';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { z } from 'zod';
 import type { AuditLog } from '../audit/audit.js';
@@ -14,8 +14,7 @@ const COOKIE = 'rta_device';
 // A client this far behind is dropped; it can reconnect and get the replay buffer.
 const MAX_BUFFERED_BYTES = 1024 * 1024;
 
-const size = z.number().int().min(1).max(500);
-const createBody = z.object({ cols: size.default(80), rows: size.default(24) });
+const createBody = z.object({ cols: terminalSize.default(80), rows: terminalSize.default(24) });
 const pairBody = z.object({ code: z.string().max(32), name: z.string().trim().min(1).max(50) });
 
 export interface Deps {
@@ -118,6 +117,11 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
     res.sendStatus(204);
   });
 
+  // Last in the chain: bad JSON and other errors get a status code, never a stack trace.
+  app.use((err: { status?: number }, _req: Request, res: Response, _next: NextFunction) => {
+    res.sendStatus(err.status ?? 500);
+  });
+
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   const reject = (socket: Duplex, status: string) => socket.end(`HTTP/1.1 ${status}\r\n\r\n`);
 
@@ -164,6 +168,7 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
       ws.on('close', () => {
         clearInterval(heartbeat);
         mine.delete(ws);
+        if (mine.size === 0) sockets.delete(device.id);
         detach();
       });
     });

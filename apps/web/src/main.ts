@@ -107,6 +107,7 @@ function startTerminal(): void {
         sessionStorage.removeItem(KEY);
         return status('session ended');
       }
+      if (!res.ok) return status(`stopped (server returned ${res.status})`);
       connect(id);
     } catch {
       setTimeout(() => reconnect(id), 2000); // server unreachable

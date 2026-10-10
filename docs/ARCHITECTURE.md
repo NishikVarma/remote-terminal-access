@@ -29,7 +29,8 @@ Browser (xterm.js) <--WebSocket /ws/:id--> Session <--> PtyHost (node-pty / ConP
 - Attaching to an existing session never spawns a process.
 - Every request must pass the Host check (DNS rebinding) and, if it has an Origin, the Origin allow-list.
 - Output replay buffer is capped at 256 KiB; `MAX_SESSIONS` caps sessions; a session with no client is killed after `SESSION_IDLE_MINUTES`.
-- Server binds `127.0.0.1` by default.
+- Server binds `127.0.0.1` by default. A non-loopback `HOST` is refused at startup unless `ALLOW_INSECURE_BIND=true` (no TLS yet).
+- Errors return a bare status code; stack traces are never sent to clients.
 
 ## Session states
 

@@ -19,6 +19,12 @@ describe('loadConfig', () => {
     expect(loadConfig({ ALLOWED_ORIGINS: '' }).ALLOWED_ORIGINS).toEqual([]);
   });
 
+  it('refuses a non-loopback HOST unless explicitly allowed', () => {
+    expect(() => loadConfig({ HOST: '0.0.0.0' })).toThrow('ALLOW_INSECURE_BIND');
+    expect(loadConfig({ HOST: '0.0.0.0', ALLOW_INSECURE_BIND: 'true' }).HOST).toBe('0.0.0.0');
+    expect(loadConfig({ HOST: 'localhost' }).HOST).toBe('localhost');
+  });
+
   it('rejects a wildcard origin', () => {
     expect(() => loadConfig({ ALLOWED_ORIGINS: '*' })).toThrow();
   });
