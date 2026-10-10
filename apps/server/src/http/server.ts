@@ -105,7 +105,15 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
     res.sendStatus(s ? 204 : 404);
   });
 
-  app.get('/devices', (_req, res) => void res.json(devices.list()));
+  app.get('/devices', (_req, res) => {
+    const me = (res.locals.device as Device).id;
+    res.json(devices.list().map((d) => ({ ...d, current: d.id === me })));
+  });
+
+  app.get('/audit', (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    res.json(audit.recent(limit));
+  });
 
   // Any paired device may revoke any device (single-owner tool). Revoking also ends its sessions.
   app.delete('/devices/:id', (req, res) => {

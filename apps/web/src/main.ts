@@ -2,6 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { ClientMessage, ServerMessage } from '@rta/shared';
+import { mountDevicesPanel } from './devices-panel.js';
 
 const KEY = 'sessionId';
 const root = document.getElementById('terminal')!;
@@ -69,9 +70,12 @@ function startTerminal(): void {
   term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
 
   const needPairing = () => {
+    devicesPanel.destroy();
     term.dispose();
     showPairing();
   };
+
+  const devicesPanel = mountDevicesPanel(needPairing);
 
   // The server replays buffered output on every attach, so the screen is reset first.
   const connect = (id: string) => {

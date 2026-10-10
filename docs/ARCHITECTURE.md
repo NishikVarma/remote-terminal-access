@@ -23,6 +23,12 @@ Browser (xterm.js) <--WebSocket /ws/:id--> Session <--> PtyHost (node-pty / ConP
 3. Every HTTP route except `/healthz` and `/pair`, and every WebSocket upgrade, requires a valid, unrevoked, unexpired device cookie (30 days, absolute).
 4. A device sees only the sessions it created. Revoking a device kills its sessions and closes its open sockets.
 
+## Device management API
+
+- `GET /devices`: paired devices with a `current` flag for the caller. `DELETE /devices/:id`: revoke.
+- `GET /audit?limit=N`: newest-first audit events (1-200, default 50). Any paired device may read it (single-owner tool).
+- The web client shows these in a "Devices" panel. Device names come from the browser user agent and are rendered with `textContent` only.
+
 ## Rules
 
 - The shell is chosen by server config (`SHELL_FILE`), never by the client.

@@ -166,6 +166,30 @@ describe('sessions', () => {
     expect((await call(`/sessions/${id}`, del)).status).toBe(404);
   });
 
+  it('lists devices with a current flag and serves a bounded audit log, both authenticated', async () => {
+    await start();
+    expect((await call('/audit')).status).toBe(401);
+
+    const phone = await pair('phone');
+    const laptop = await pair('laptop');
+    const list = (await (await call('/devices', { cookie: phone.cookie })).json()) as Array<{
+      name: string;
+      current: boolean;
+    }>;
+    expect(list.map((d) => [d.name, d.current])).toEqual([
+      ['phone', true],
+      ['laptop', false],
+    ]);
+
+    const events = (await (
+      await call('/audit?limit=1', { cookie: laptop.cookie })
+    ).json()) as Array<{
+      type: string;
+    }>;
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe('pair_succeeded');
+  });
+
   it('revoking a device ends its sockets and sessions and blocks its cookie', async () => {
     await start();
     const phone = await pair('phone');
