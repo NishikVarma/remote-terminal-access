@@ -19,3 +19,5 @@ learning-notes/
 .DS_Store
 Thumbs.db
 data/
+.idea/
+.vscode/
