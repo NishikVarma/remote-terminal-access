@@ -23,6 +23,8 @@ export interface Deps {
   devices: DeviceStore;
   pairing: PairingCodes;
   audit: AuditLog;
+  /** Built web client to serve (no login needed: it contains the pairing form). */
+  webDir?: string;
 }
 
 const tokenOf = (req: IncomingMessage): string | undefined =>
@@ -31,8 +33,14 @@ const tokenOf = (req: IncomingMessage): string | undefined =>
     .map((c) => c.trim().split('='))
     .find(([name]) => name === COOKIE)?.[1];
 
-export function createServer({ config, sessions, devices, pairing, audit }: Deps): Server {
-  const hostnames = new Set(['127.0.0.1', 'localhost', '[::1]', config.HOST]);
+export function createServer({ config, sessions, devices, pairing, audit, webDir }: Deps): Server {
+  const hostnames = new Set([
+    '127.0.0.1',
+    'localhost',
+    '[::1]',
+    config.HOST,
+    ...config.ALLOWED_HOSTS,
+  ]);
   const ttlMs = config.DEVICE_TTL_DAYS * 86_400_000;
 
   // Blocks DNS rebinding (Host) and cross-site requests (Origin). Non-browser
@@ -52,6 +60,7 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
   app.use(express.json({ limit: '1kb' }));
 
   app.get('/healthz', (_req, res) => void res.json({ status: 'ok' }));
+  if (webDir) app.use(express.static(webDir));
 
   app.post('/pair', (req, res) => {
     const body = pairBody.safeParse(req.body);
@@ -62,7 +71,12 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
     }
     const { device, token } = devices.create(body.data.name);
     audit.record('pair_succeeded', device.id, device.name);
-    res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'strict', maxAge: ttlMs });
+    res.cookie(COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: config.COOKIE_SECURE === 'true',
+      maxAge: ttlMs,
+    });
     res.status(201).json({ deviceId: device.id });
   });
 

@@ -66,6 +66,36 @@ describe('DeviceStore', () => {
   });
 });
 
+describe('retention', () => {
+  it('prunes audit events by age and by row count', () => {
+    vi.useFakeTimers();
+    const audit = new AuditLog(openDb(':memory:'));
+    audit.record('pair_failed');
+    vi.advanceTimersByTime(10_000);
+    for (let i = 0; i < 5; i++) audit.record('auth_denied');
+
+    audit.prune(5_000, 100); // age: drops the first event
+    expect(audit.recent()).toHaveLength(5);
+    audit.prune(60_000, 2); // count: keeps only the newest two
+    expect(audit.recent()).toHaveLength(2);
+  });
+
+  it('prunes devices revoked or expired longer ago than the grace period', () => {
+    vi.useFakeTimers();
+    const store = new DeviceStore(openDb(':memory:'), 1_000);
+    const revoked = store.create('revoked');
+    store.revoke(revoked.device.id);
+    const active = new DeviceStore(openDb(':memory:'), 1_000_000);
+    active.create('active');
+
+    vi.advanceTimersByTime(10_000);
+    store.prune(5_000);
+    expect(store.list()).toHaveLength(0);
+    active.prune(5_000);
+    expect(active.list()).toHaveLength(1);
+  });
+});
+
 describe('AuditLog', () => {
   it('records and returns newest first', () => {
     const audit = new AuditLog(openDb(':memory:'));

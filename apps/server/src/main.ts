@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { ZodError } from 'zod';
 import { AuditLog } from './audit/audit.js';
 import { DeviceStore } from './auth/devices.js';
@@ -30,7 +32,18 @@ const sessions = new SessionManager(
   { maxSessions: config.MAX_SESSIONS, idleMs: config.SESSION_IDLE_MINUTES * 60_000 },
   (s) => audit.record('session_expired', s.ownerId, s.id),
 );
-const server = createServer({ config, sessions, devices, pairing, audit });
+// apps/web/dist, relative to both src/ and dist/ of this package.
+const builtWeb = fileURLToPath(new URL('../../web/dist', import.meta.url));
+const webDir = existsSync(builtWeb) ? builtWeb : undefined;
+const server = createServer({ config, sessions, devices, pairing, audit, webDir });
+
+const retentionMs = config.AUDIT_RETENTION_DAYS * 86_400_000;
+const prune = () => {
+  audit.prune(retentionMs, config.AUDIT_MAX_ROWS);
+  devices.prune(retentionMs);
+};
+prune();
+setInterval(prune, 3_600_000).unref();
 
 const printCode = () =>
   console.log(
@@ -39,6 +52,9 @@ const printCode = () =>
 
 server.listen(config.PORT, config.HOST, () => {
   console.log(`listening on http://${config.HOST}:${config.PORT}`);
+  console.log(
+    webDir ? `serving web client from ${webDir}` : 'web client not built (npm run build); API only',
+  );
   printCode();
 });
 

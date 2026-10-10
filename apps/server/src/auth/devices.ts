@@ -68,6 +68,14 @@ export class DeviceStore {
     return rows.map(toDevice);
   }
 
+  /** Removes devices that were revoked or expired more than `graceMs` ago. */
+  prune(graceMs: number): void {
+    const cutoff = Date.now() - graceMs;
+    this.db
+      .prepare('DELETE FROM devices WHERE revoked_at < ? OR expires_at < ?')
+      .run(cutoff, cutoff);
+  }
+
   revoke(id: string): boolean {
     const r = this.db
       .prepare('UPDATE devices SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL')

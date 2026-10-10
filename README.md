@@ -19,4 +19,4 @@ npm run dev:web       # open http://localhost:5173 (must be localhost, see ALLOW
 
 Copy `.env.example` to `.env` for configuration. Never commit `.env`.
 
-See `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`.
+See `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md` (phone access over HTTPS) and `docs/ROADMAP.md`.

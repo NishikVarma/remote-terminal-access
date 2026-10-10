@@ -1,4 +1,7 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { ServerMessage } from '@rta/shared';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,7 +24,12 @@ let pairing: PairingCodes;
 let audit: AuditLog;
 let base: string;
 
-async function start(deviceTtlMs = 86_400_000, heartbeatSeconds = 15): Promise<void> {
+async function start(
+  deviceTtlMs = 86_400_000,
+  heartbeatSeconds = 15,
+  env: Record<string, string> = {},
+  webDir?: string,
+): Promise<void> {
   const db = openDb(':memory:');
   audit = new AuditLog(db);
   pairing = new PairingCodes();
@@ -30,8 +38,11 @@ async function start(deviceTtlMs = 86_400_000, heartbeatSeconds = 15): Promise<v
     idleMs: 60_000,
   });
   const devices = new DeviceStore(db, deviceTtlMs);
-  const cfg = { ...config, HEARTBEAT_SECONDS: heartbeatSeconds };
-  server = createServer({ config: cfg, sessions, devices, pairing, audit });
+  const cfg = {
+    ...loadConfig({ ALLOWED_ORIGINS: ORIGIN, SHELL_FILE: 'powershell.exe', ...env }),
+    HEARTBEAT_SECONDS: heartbeatSeconds,
+  };
+  server = createServer({ config: cfg, sessions, devices, pairing, audit, webDir });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = `127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
@@ -94,6 +105,50 @@ describe('origin and host checks', () => {
         .on('error', () => r(undefined)),
     );
     expect(status).toBe(403);
+  });
+});
+
+describe('static web client', () => {
+  it('serves the built page without login while the API stays protected', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rta-web-'));
+    writeFileSync(join(dir, 'index.html'), '<h1>pairing page</h1>');
+    await start(86_400_000, 15, {}, dir);
+
+    const page = await call('/');
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('pairing page');
+    expect((await call('/sessions', { method: 'POST', body: {} })).status).toBe(401);
+    expect((await call('/', { origin: 'http://evil.example' })).status).toBe(403);
+  });
+});
+
+describe('behind an HTTPS proxy', () => {
+  const hostStatus = (host: string) =>
+    new Promise((r) =>
+      http
+        .get(`http://${base}/healthz`, { headers: { host } }, (res) => r(res.statusCode))
+        .on('error', () => r(undefined)),
+    );
+
+  it('accepts only the configured extra hostnames', async () => {
+    await start(86_400_000, 15, { ALLOWED_HOSTS: 'Pc.Tailnet.ts.net' });
+    expect(await hostStatus('pc.tailnet.ts.net')).toBe(200);
+    expect(await hostStatus('pc.tailnet.ts.net:443')).toBe(200);
+    expect(await hostStatus('evil.example')).toBe(403);
+  });
+
+  it('marks the device cookie Secure only when configured', async () => {
+    const cookieFor = async (env: Record<string, string>) => {
+      await start(86_400_000, 15, env);
+      const body = { code: pairing.issue(), name: 'phone' };
+      const res = await call('/pair', { method: 'POST', body });
+      const cookie = res.headers.get('set-cookie')!;
+      sessions.shutdown();
+      await new Promise((r) => server.close(r));
+      return cookie;
+    };
+    expect(await cookieFor({ COOKIE_SECURE: 'true' })).toMatch(/; Secure/i);
+    expect(await cookieFor({})).not.toMatch(/; Secure/i);
   });
 });
 

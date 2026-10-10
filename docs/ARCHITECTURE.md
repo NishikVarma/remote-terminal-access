@@ -23,6 +23,11 @@ Browser (xterm.js) <--WebSocket /ws/:id--> Session <--> PtyHost (node-pty / ConP
 3. Every HTTP route except `/healthz` and `/pair`, and every WebSocket upgrade, requires a valid, unrevoked, unexpired device cookie (30 days, absolute).
 4. A device sees only the sessions it created. Revoking a device kills its sessions and closes its open sockets.
 
+## Web client delivery
+
+- The server serves `apps/web/dist` (if built) without login, because it contains the pairing form. Everything else still requires a device cookie and passes Host/Origin checks.
+- In development, Vite serves the page and proxies `/sessions`, `/ws`, `/pair`, `/devices`, `/audit` to the server.
+
 ## Device management API
 
 - `GET /devices`: paired devices with a `current` flag for the caller. `DELETE /devices/:id`: revoke.

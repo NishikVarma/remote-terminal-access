@@ -27,6 +27,14 @@ export class AuditLog {
       .run(Date.now(), type, deviceId, detail);
   }
 
+  /** Deletes events older than maxAgeMs, then keeps only the newest maxRows. */
+  prune(maxAgeMs: number, maxRows: number): void {
+    this.db.prepare('DELETE FROM audit_events WHERE ts < ?').run(Date.now() - maxAgeMs);
+    this.db
+      .prepare('DELETE FROM audit_events WHERE id <= (SELECT MAX(id) FROM audit_events) - ?')
+      .run(maxRows);
+  }
+
   recent(limit = 100): AuditEvent[] {
     const rows = this.db
       .prepare('SELECT id, ts, type, device_id, detail FROM audit_events ORDER BY id DESC LIMIT ?')

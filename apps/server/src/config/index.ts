@@ -30,6 +30,20 @@ const schema = z
     DB_PATH: z.string().default('data/rta.db'),
     // There is no TLS yet, so binding beyond loopback exposes the pairing code and cookie.
     ALLOW_INSECURE_BIND: z.enum(['true', 'false']).default('false'),
+    // Extra hostnames (no port) the server answers to, e.g. a Tailscale name behind `tailscale serve`.
+    ALLOWED_HOSTS: z
+      .string()
+      .default('')
+      .transform((s) =>
+        s
+          .split(',')
+          .map((h) => h.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    // Set true when users reach the server over HTTPS (through a TLS-terminating proxy).
+    COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
+    AUDIT_RETENTION_DAYS: z.coerce.number().positive().default(90),
+    AUDIT_MAX_ROWS: z.coerce.number().int().min(100).default(10_000),
   })
   .refine((c) => loopback.has(c.HOST) || c.ALLOW_INSECURE_BIND === 'true', {
     message: 'HOST is not loopback; set ALLOW_INSECURE_BIND=true to accept plain-HTTP exposure',
