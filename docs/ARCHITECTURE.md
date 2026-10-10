@@ -29,7 +29,7 @@ Browser (xterm.js) <--WebSocket /ws/:id--> Session <--> PtyHost (node-pty / ConP
 - Attaching to an existing session never spawns a process.
 - Every request must pass the Host check (DNS rebinding) and, if it has an Origin, the Origin allow-list.
 - Output replay buffer is capped at 256 KiB; `MAX_SESSIONS` caps sessions; a session with no client is killed after `SESSION_IDLE_MINUTES`.
-- Server binds `127.0.0.1` by default. A non-loopback `HOST` is refused at startup unless `ALLOW_INSECURE_BIND=true` (no TLS yet).
+- Server binds `127.0.0.1` by default. A non-loopback `HOST` is refused at startup unless `ALLOW_INSECURE_BIND=true` (no TLS yet). Errors return a bare status code; stack traces are never sent to clients.
 - Errors return a bare status code; stack traces are never sent to clients.
 
 ## Session states
@@ -61,7 +61,7 @@ Browser (xterm.js) <--WebSocket /ws/:id--> Session <--> PtyHost (node-pty / ConP
 
 ## Known limitations
 
-- No TLS: the cookie is not `Secure`, so this is safe only on loopback. Needed before any LAN/remote use.
+- No TLS: the cookie is not `Secure`, so this is safe only on loopback. Needed before any LAN/remote use; a non-loopback bind needs an explicit opt-in.
 - Any local program on this PC can connect without a browser (no Origin) once it has a cookie; it still needs a valid token, but malware running as the same user can read the console or database. Out of scope.
 - Any paired device can revoke any other (single-owner tool). No separate admin role.
 - Audit log has no retention limit yet, and `auth_denied` can grow under scanning.
