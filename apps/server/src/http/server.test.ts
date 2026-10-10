@@ -21,7 +21,7 @@ let pairing: PairingCodes;
 let audit: AuditLog;
 let base: string;
 
-async function start(): Promise<void> {
+async function start(deviceTtlMs = 86_400_000, recheckSeconds = 30): Promise<void> {
   const db = openDb(':memory:');
   audit = new AuditLog(db);
   pairing = new PairingCodes();
@@ -29,8 +29,9 @@ async function start(): Promise<void> {
     maxSessions: 3,
     idleMs: 60_000,
   });
-  const devices = new DeviceStore(db, 86_400_000);
-  server = createServer({ config, sessions, devices, pairing, audit });
+  const devices = new DeviceStore(db, deviceTtlMs);
+  const cfg = { ...config, AUTH_RECHECK_SECONDS: recheckSeconds };
+  server = createServer({ config: cfg, sessions, devices, pairing, audit });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = `127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
@@ -175,6 +176,16 @@ describe('sessions', () => {
     await waitFor(() => sessions.getOwned(id, phone.id) === undefined);
     const revoked = audit.recent().find((e) => e.type === 'device_revoked');
     expect(revoked).toMatchObject({ deviceId: laptop.id, detail: phone.id });
+  });
+
+  it('closes an open socket once its device token expires', async () => {
+    await start(400, 0.1);
+    const { cookie } = await pair();
+    const id = await newSession(cookie);
+    const ws = new WebSocket(`ws://${base}/ws/${id}`, { headers: { origin: ORIGIN, cookie } });
+    await new Promise((r) => ws.once('open', r));
+    const code = await new Promise<number>((r) => ws.once('close', r));
+    expect(code).toBe(4001);
   });
 
   it.runIf(process.platform === 'win32')(

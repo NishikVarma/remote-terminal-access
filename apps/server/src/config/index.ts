@@ -22,6 +22,8 @@ const schema = z.object({
   MAX_SESSIONS: z.coerce.number().int().min(1).default(5),
   SESSION_IDLE_MINUTES: z.coerce.number().min(1).default(30),
   DEVICE_TTL_DAYS: z.coerce.number().min(1).default(30),
+  // How often open sockets re-validate their device (expiry, revocation).
+  AUTH_RECHECK_SECONDS: z.coerce.number().positive().default(30),
   DB_PATH: z.string().default('data/rta.db'),
 });
 

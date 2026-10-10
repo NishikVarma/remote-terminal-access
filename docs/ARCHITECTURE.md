@@ -54,4 +54,5 @@ running (a client is attached) <-> disconnected (no client, shell alive, idle ti
 - Any paired device can revoke any other (single-owner tool). No separate admin role.
 - Audit log has no retention limit yet, and `auth_denied` can grow under scanning.
 - `node:sqlite` is experimental in Node 22 (prints a warning); Postgres migration is planned.
+- Open sockets re-check their device every 30 s (`AUTH_RECHECK_SECONDS`), so expiry or revocation ends them within that window. Deleting a cookie in the browser does not end an open session; revoke the device instead.
 - No WebSocket backpressure, no heartbeat, no login rate limit beyond the pairing code.

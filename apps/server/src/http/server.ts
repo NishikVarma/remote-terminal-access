@@ -135,6 +135,11 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
       const mine = sockets.get(device.id) ?? new Set<WebSocket>();
       sockets.set(device.id, mine.add(ws));
       const detach = session.attach((msg) => ws.send(JSON.stringify(msg)));
+      // Auth is checked at upgrade; keep checking so expiry/revocation ends open sockets too.
+      const token = tokenOf(req);
+      const recheck = setInterval(() => {
+        if (!devices.authenticate(token)) ws.close(4001, 'unauthorized');
+      }, config.AUTH_RECHECK_SECONDS * 1000);
       ws.on('message', (raw) => {
         try {
           const msg = clientMessageSchema.safeParse(JSON.parse(raw.toString()));
@@ -144,6 +149,7 @@ export function createServer({ config, sessions, devices, pairing, audit }: Deps
         }
       });
       ws.on('close', () => {
+        clearInterval(recheck);
         mine.delete(ws);
         detach();
       });
