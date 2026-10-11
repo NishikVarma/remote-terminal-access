@@ -62,6 +62,14 @@ CI runs the same steps on Windows (the PTY tests need ConPTY).
 - Any paired device can revoke any other and read the audit log (single-owner design).
 - See the threat model and known limitations in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## Companion app
+
+[smart-remote-access-terminal](https://github.com/NishikVarma/smart-remote-access-terminal) is an optional
+browser client that puts an AI side panel (explain errors, plain English to reviewed commands, session
+summaries, a dangerous-command warning) in front of this engine through a same-origin proxy. It needs no
+code change here: add its origin to `ALLOWED_ORIGINS`. The surface it relies on is documented in
+[`docs/API.md`](docs/API.md). The engine works fully on its own.
+
 ## Layout
 
 ```
